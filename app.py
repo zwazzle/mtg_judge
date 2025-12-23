@@ -9,12 +9,16 @@ from database import MTG_VOCABULARY, SPECIAL_CASES, SYSTEM_GUIDELINES
 from mtg_logic import get_scryfall_rulings, get_rules_context, search_scryfall
 
 # 1. PAGE CONFIG
-st.set_page_config(page_title="Monster Magic Mastermind", page_icon="🧙‍♂️", layout="wide")
+st.set_page_config(
+    page_title="Monster Magic Mastermind",
+    page_icon="🧙‍♂️", 
+    layout="wide"
+)
 
-# 2. VERBESSERTES CSS FÜR HOVER
-# Wir nutzen Inline-Styles für das Bild, da CSS-Variablen im Stream schwer zu greifen sind
+# 2. CSS FÜR HOVER-EFFEKT (Tooltips)
 st.markdown("""
     <style>
+    /* Styling für den verlinkten Kartennamen */
     .card-hover {
         color: #ff4b4b !important;
         text-decoration: underline;
@@ -22,24 +26,27 @@ st.markdown("""
         position: relative;
         font-weight: bold;
     }
-    .card-hover .tooltip-img {
-        display: none;
+    /* Das Bild, das beim Hover erscheint */
+    .card-hover:hover::after {
+        content: "";
+        background-image: var(--bg-img);
         position: absolute;
         bottom: 125%;
         left: 50%;
         transform: translateX(-50%);
-        width: 220px;
+        width: 200px;
+        height: 280px;
+        background-size: contain;
+        background-repeat: no-repeat;
         z-index: 1000;
         border-radius: 10px;
-        box-shadow: 0px 10px 30px rgba(0,0,0,0.8);
-    }
-    .card-hover:hover .tooltip-img {
-        display: block;
+        box-shadow: 0px 10px 30px rgba(0,0,0,0.5);
+        background-color: #1e1e1e;
     }
     </style>
 """, unsafe_allow_html=True)
 
-# 3. CONFIG
+# 3. CONFIG & SECRETS
 if "DEEPSEEK_API_KEY" in st.secrets:
     api_key = st.secrets["DEEPSEEK_API_KEY"]
 else:
@@ -52,7 +59,8 @@ if "rules_lines" not in st.session_state:
     try:
         with open("rules.txt", "r", encoding="utf-8") as f:
             st.session_state.rules_lines = f.readlines()
-    except: st.session_state.rules_lines = []
+    except FileNotFoundError:
+        st.session_state.rules_lines = []
 
 if 'my_cards' not in st.session_state: st.session_state.my_cards = []
 if 'messages' not in st.session_state: st.session_state.messages = []
@@ -60,65 +68,63 @@ if 'messages' not in st.session_state: st.session_state.messages = []
 # --- UI ---
 st.title("🧙‍♂️ Monster Magic Mastermind")
 
+# KARTEN-MANAGEMENT
 with st.expander("🎴 Karten-Auswahl verwalten", expanded=True):
     search_key = "card_search"
     selected = st_searchbox(search_scryfall, key=search_key)
+    
     if selected:
-        res = requests.get(f"https://api.scryfall.com/cards/named?exact={selected}")
-        if res.status_code == 200:
-            st.session_state.my_cards.append(res.json())
-            st.rerun()
+        if selected not in [c['name'] for c in st.session_state.my_cards]:
+            res = requests.get(f"https://api.scryfall.com/cards/named?exact={selected}")
+            if res.status_code == 200:
+                st.session_state.my_cards.append(res.json())
+                if search_key in st.session_state: del st.session_state[search_key]
+                st.rerun()
 
     cols = st.columns(6)
     for i, card in enumerate(st.session_state.my_cards):
         with cols[i % 6]:
-            st.image(card['image_uris']['normal'], width=150)
+            if 'image_uris' in card:
+                st.image(card['image_uris']['normal'], width=150)
             if st.button("Löschen", key=f"del_{i}"):
                 st.session_state.my_cards.pop(i)
                 st.rerun()
 
-# CHAT ANZEIGE
+# CHAT VERLAUF (mit HTML-Support für Hover)
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.write(msg["content"], unsafe_allow_html=True)
 
-# CHAT EINGABE & STREAMING
+# CHAT EINGABE
 if prompt := st.chat_input("Deine Regelfrage..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
-    with st.chat_message("user"): st.markdown(prompt)
+    with st.chat_message("user"):
+        st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        # Bild-URLs für die KI vorbereiten
-        hover_instruction = "NUTZE FÜR KARTEN DIESES HTML: <span class='card-hover'>NAME<img class='tooltip-img' src='URL'></span>\n"
+        # Bild-Daten für die Hover-Logik aufbereiten
+        hover_data_instruction = "NUTZE FÜR HOVER-EFFEKTE DIESE LINKS:\n"
         for c in st.session_state.my_cards:
-            hover_instruction += f"- {c['name']}: {c['image_uris']['normal']}\n"
+            hover_data_instruction += f"- {c['name']}: {c['image_uris']['normal']}\n"
 
         card_info = [f"CARD: {c['name']}\nTEXT: {c.get('oracle_text')}" for c in st.session_state.my_cards]
         rules_ctx = get_rules_context(prompt, [c['name'] for c in st.session_state.my_cards], st.session_state.rules_lines)
         
-        sys_msg = f"""Du bist Monster Magic Mastermind. 
-        {SYSTEM_GUIDELINES}
-        {hover_instruction}
+        sys_msg = f"""Du bist Monster Magic Mastermind.
+{SYSTEM_GUIDELINES}
+{hover_data_instruction}
+        PRIORITÄT: 1. SPEZIAL: {SPECIAL_CASES} | 2. RULINGS: {card_info} | 3. RULES: {rules_ctx}
         VOKABULAR: {MTG_VOCABULARY}
-        KONTEXT: {card_info} | RULES: {rules_ctx}"""
+        """
+
+        full_messages = [{"role": "system", "content": sys_msg}] + st.session_state.messages
 
         def stream_generator():
-            stream = client.chat.completions.create(
-                model="deepseek-chat",
-                messages=[{"role": "system", "content": sys_msg}] + st.session_state.messages,
-                stream=True
-            )
-            for chunk in stream:
+            response = client.chat.completions.create(model="deepseek-chat", messages=full_messages, stream=True)
+            for chunk in response:
                 if chunk.choices[0].delta.content:
                     yield chunk.choices[0].delta.content
 
-        # WICHTIG: Damit das Streaming HTML erlaubt, nutzen wir einen Container
-        placeholder = st.empty()
-        full_response = ""
-        
-        for chunk in stream_generator():
-            full_response += chunk
-            # Wir rendern den Text bei jedem Schritt neu als HTML
-            placeholder.write(full_response, unsafe_allow_html=True)
-        
+        # Streaming-Antwort anzeigen
+        full_response = st.write_stream(stream_generator())
         st.session_state.messages.append({"role": "assistant", "content": full_response})
