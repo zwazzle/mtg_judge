@@ -15,38 +15,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# 2. CSS FÜR HOVER-EFFEKT (Tooltips)
-st.markdown("""
-    <style>
-    /* Styling für den verlinkten Kartennamen */
-    .card-hover {
-        color: #ff4b4b !important;
-        text-decoration: underline;
-        cursor: help;
-        position: relative;
-        font-weight: bold;
-    }
-    /* Das Bild, das beim Hover erscheint */
-    .card-hover:hover::after {
-        content: "";
-        background-image: var(--bg-img);
-        position: absolute;
-        bottom: 125%;
-        left: 50%;
-        transform: translateX(-50%);
-        width: 200px;
-        height: 280px;
-        background-size: contain;
-        background-repeat: no-repeat;
-        z-index: 1000;
-        border-radius: 10px;
-        box-shadow: 0px 10px 30px rgba(0,0,0,0.5);
-        background-color: #1e1e1e;
-    }
-    </style>
-""", unsafe_allow_html=True)
-
-# 3. CONFIG & SECRETS
+# 2. CONFIG & SECRETS
 if "DEEPSEEK_API_KEY" in st.secrets:
     api_key = st.secrets["DEEPSEEK_API_KEY"]
 else:
@@ -54,7 +23,7 @@ else:
 
 client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
 
-# 4. SESSION STATE
+# 3. SESSION STATE
 if "rules_lines" not in st.session_state:
     try:
         with open("rules.txt", "r", encoding="utf-8") as f:
@@ -90,41 +59,52 @@ with st.expander("🎴 Karten-Auswahl verwalten", expanded=True):
                 st.session_state.my_cards.pop(i)
                 st.rerun()
 
-# CHAT VERLAUF (mit HTML-Support für Hover)
+# CHAT VERLAUF ANZEIGEN
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
-        st.write(msg["content"], unsafe_allow_html=True)
+        st.markdown(msg["content"])
 
-# CHAT EINGABE
-if prompt := st.chat_input("Deine Regelfrage..."):
+# CHAT EINGABE & STREAMING
+if prompt := st.chat_input("Deine Regelfrage an den Mastermind..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        # Bild-Daten für die Hover-Logik aufbereiten
-        hover_data_instruction = "NUTZE FÜR HOVER-EFFEKTE DIESE LINKS:\n"
-        for c in st.session_state.my_cards:
-            hover_data_instruction += f"- {c['name']}: {c['image_uris']['normal']}\n"
+        # Links für die KI vorbereiten
+        links_for_ai = "\n".join([f"- {c['name']}: {c.get('scryfall_uri')}" for c in st.session_state.my_cards])
 
-        card_info = [f"CARD: {c['name']}\nTEXT: {c.get('oracle_text')}" for c in st.session_state.my_cards]
+        card_info = []
+        active_special = ""
+        for c in st.session_state.my_cards:
+            if c['name'] in SPECIAL_CASES:
+                active_special += f"\n!!! SPEZIALREGEL FÜR {c['name']}: {SPECIAL_CASES[c['name']]}\n"
+            r = get_scryfall_rulings(c['id'])
+            card_info.append(f"CARD: {c['name']}\nTEXT: {c.get('oracle_text')}\nRULINGS: {r}")
+
         rules_ctx = get_rules_context(prompt, [c['name'] for c in st.session_state.my_cards], st.session_state.rules_lines)
         
         sys_msg = f"""Du bist Monster Magic Mastermind.
 {SYSTEM_GUIDELINES}
-{hover_data_instruction}
-        PRIORITÄT: 1. SPEZIAL: {SPECIAL_CASES} | 2. RULINGS: {card_info} | 3. RULES: {rules_ctx}
-        VOKABULAR: {MTG_VOCABULARY}
-        """
 
-        full_messages = [{"role": "system", "content": sys_msg}] + st.session_state.messages
+VERLINKUNG:
+Wenn du eine Karte aus der folgenden Liste nennst, verlinke sie IMMER so: [KARTENNAME](URL)
+KARTEN-LISTE:
+{links_for_ai}
+
+PRIORITÄT: 1. SPEZIALREGELN: {active_special} | 2. RULINGS/TEXT: {card_info} | 3. REGELN: {rules_ctx}
+VOKABULAR: {MTG_VOCABULARY}
+"""
 
         def stream_generator():
-            response = client.chat.completions.create(model="deepseek-chat", messages=full_messages, stream=True)
+            response = client.chat.completions.create(
+                model="deepseek-chat",
+                messages=[{"role": "system", "content": sys_msg}] + st.session_state.messages,
+                stream=True
+            )
             for chunk in response:
-                if chunk.choices[0].delta.content:
+                if chunk.choices[0].delta.content is not None:
                     yield chunk.choices[0].delta.content
 
-        # Streaming-Antwort anzeigen
         full_response = st.write_stream(stream_generator())
         st.session_state.messages.append({"role": "assistant", "content": full_response})
