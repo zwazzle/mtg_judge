@@ -29,7 +29,7 @@ if 'my_cards' not in st.session_state: st.session_state.my_cards = []
 if 'messages' not in st.session_state: st.session_state.messages = []
 
 # --- UI ---
-st.set_page_config(page_title="MTG Judge Online", layout="wide")
+st.set_page_config(page_title="Monster Magic Mastermind", layout="wide")
 st.title("🧙‍♂️ MTG Judge Chat")
 
 # Karten-Management
