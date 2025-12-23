@@ -66,3 +66,25 @@ class MTGLogic:
             "toughness": card.get("toughness", ""),
         }
         return info
+
+
+# Für Backwards Compatibility - falls alte Funktionen aufgerufen werden
+def get_scryfall_rulings(card_id):
+    """Legacy-Funktion für Kompatibilität"""
+    return MTGLogic.get_scryfall_rulings(card_id)
+
+def get_rules_context(question, card_names, rules_lines):
+    """Legacy-Funktion für Kompatibilität"""
+    return MTGLogic.get_rules_context(question, card_names, rules_lines)
+
+def search_scryfall(searchterm: str):
+    """Wird von der Searchbox für die Autovervollständigung genutzt."""
+    if len(searchterm) < 3: 
+        return []
+    try:
+        res = requests.get(f"https://api.scryfall.com/cards/autocomplete?q={searchterm}")
+        if res.status_code == 200:
+            return res.json().get("data", [])
+    except Exception:
+        return []
+    return []
