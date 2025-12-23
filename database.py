@@ -106,7 +106,5 @@ SYSTEM_GUIDELINES = """
 4. Nenne die Regelnummern der 'Comprehensive Rules' (CR), wenn möglich, und zitiere den relevanten Regeltext, falls er Klarheit schafft.
 5. Erkläre das Konzept der 'Layers', falls es um Typ-Änderungen oder Status-Änderungen geht.
 6. Stelle eine Rückfrage, ob du noch weitere Unklarheiten zur Ursprungsfrage beantworten kannst, oder ob etwas unklar geblieben ist. 
-7. Kartennamen, die du nennst, IMMMER auf Englisch! Und schreibe Kartennamen IMMER in diesem Format: 
-   <a class="card-hover" data-img="URL_ZUM_BILD">KARTENNAME</a>
-   Ersetze URL_ZUM_BILD durch den Scryfall-Bildlink der Karte.
+7. Kartennamen, die du nennst, IMMMER auf Englisch! 
 """
