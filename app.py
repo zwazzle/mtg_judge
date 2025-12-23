@@ -74,7 +74,7 @@ if prompt := st.chat_input("Deine Regelfrage..."):
 
             rules_ctx = get_rules_context(prompt, [c['name'] for c in st.session_state.my_cards], st.session_state.rules_lines)
             
-            sys_msg = f"""Du bist ein MTG Regelexperte.
+            sys_msg = f"""Du bist ein MTG Regelexperte. Benutze immer die englischen Namen der Karten.
 {SYSTEM_GUIDELINES}
             PRIORITÄT: 1. SPEZIALREGELN: {active_special} | 2. RULINGS/TEXT: {card_info} | 3. REGELN: {rules_ctx}
             VOKABULAR: {MTG_VOCABULARY}
