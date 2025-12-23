@@ -71,10 +71,14 @@ if prompt := st.chat_input("Deine Regelfrage an den Mastermind..."):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        # Erstelle ein Mapping von Name zu URL für die KI
-        card_link_mapping = ""
+        # 1. Wir bauen die Link-Liste direkt aus den API-Daten (scryfall_uri)
+        link_reference = ""
         for c in st.session_state.my_cards:
-            card_link_mapping += f"- {c['name']} -> URL: {c.get('scryfall_uri')}\n"
+            name = c['name']
+            # Wir nehmen die URI direkt aus dem Scryfall-Datensatz
+            actual_url = c.get('scryfall_uri')
+            if actual_url:
+                link_reference += f"- {name}: {actual_url}\n"
 
         card_info = []
         active_special = ""
@@ -86,16 +90,16 @@ if prompt := st.chat_input("Deine Regelfrage an den Mastermind..."):
 
         rules_ctx = get_rules_context(prompt, [c['name'] for c in st.session_state.my_cards], st.session_state.rules_lines)
         
-        # Verschärfte Anweisung
-        sys_msg = f"""Du bist Monster Magic Mastermind. 
+        # 2. Wir sagen der KI: Nutze NUR diese Links!
+        sys_msg = f"""Du bist Monster Magic Mastermind.
         {SYSTEM_GUIDELINES}
 
-        WICHTIGSTE REGEL FÜR LINKS:
-        Jedes Mal, wenn du eine Karte aus der Liste unten nennst, MUSST du sie als Markdown-Link formatieren: [KARTENNAME](URL)
-        Mache das für JEDE erwähnte Karte, nicht nur für die erste! Nutze keine doppelten Klammern wie [[ ]].
+        VERLINKUNGS-PFLICHT:
+        Nutze für JEDE genannte Karte aus der Liste unten das Format: [Kartenname](URL)
+        Verwende EXAKT die URLs, die hier stehen. Erfinde niemals eigene URLs!
 
-        REFERENZ-LISTE FÜR LINKS:
-        {card_link_mapping}
+        DEINE LINK-DATENBANK:
+        {link_reference}
 
         KONTEXT: {active_special} | {card_info} | RULES: {rules_ctx}
         """
