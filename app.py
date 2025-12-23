@@ -71,8 +71,10 @@ if prompt := st.chat_input("Deine Regelfrage an den Mastermind..."):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        # Links für die KI vorbereiten
-        links_for_ai = "\n".join([f"- {c['name']}: {c.get('scryfall_uri')}" for c in st.session_state.my_cards])
+        # Erstelle ein Mapping von Name zu URL für die KI
+        card_link_mapping = ""
+        for c in st.session_state.my_cards:
+            card_link_mapping += f"- {c['name']} -> URL: {c.get('scryfall_uri')}\n"
 
         card_info = []
         active_special = ""
@@ -83,6 +85,33 @@ if prompt := st.chat_input("Deine Regelfrage an den Mastermind..."):
             card_info.append(f"CARD: {c['name']}\nTEXT: {c.get('oracle_text')}\nRULINGS: {r}")
 
         rules_ctx = get_rules_context(prompt, [c['name'] for c in st.session_state.my_cards], st.session_state.rules_lines)
+        
+        # Verschärfte Anweisung
+        sys_msg = f"""Du bist Monster Magic Mastermind. 
+        {SYSTEM_GUIDELINES}
+
+        WICHTIGSTE REGEL FÜR LINKS:
+        Jedes Mal, wenn du eine Karte aus der Liste unten nennst, MUSST du sie als Markdown-Link formatieren: [KARTENNAME](URL)
+        Mache das für JEDE erwähnte Karte, nicht nur für die erste! Nutze keine doppelten Klammern wie [[ ]].
+
+        REFERENZ-LISTE FÜR LINKS:
+        {card_link_mapping}
+
+        KONTEXT: {active_special} | {card_info} | RULES: {rules_ctx}
+        """
+
+        def stream_generator():
+            response = client.chat.completions.create(
+                model="deepseek-chat",
+                messages=[{"role": "system", "content": sys_msg}] + st.session_state.messages,
+                stream=True
+            )
+            for chunk in response:
+                if chunk.choices[0].delta.content is not None:
+                    yield chunk.choices[0].delta.content
+
+        full_response = st.write_stream(stream_generator())
+        st.session_state.messages.append({"role": "assistant", "content": full_response})
         
         sys_msg = f"""Du bist Monster Magic Mastermind.
 {SYSTEM_GUIDELINES}
